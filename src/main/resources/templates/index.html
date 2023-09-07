@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Decompose matrix</title>
+</head>
+<body>
+<strong th:text="#{introduction.msg}"></strong>
+<table>
+    <tr>
+        <td><label th:text="#{row.msg}" /></td>
+        <td><input type="number" id="rows" value="2" /></td>
+    </tr>
+    <tr>
+        <td><label th:text="#{col.msg}" /></td>
+        <td><input type="number" id="columns" value="2" /></td>
+    </tr>
+    <tr>
+        <td><label th:text="#{matrix.msg}"></label> </td>
+        <td><table id="matrix-container"></table></td>
+    </tr>
+    <tr>
+        <td><label th:text="#{method.msg}"></label> </td>
+        <td>
+            <input type="radio" id="cholesky" name="method" value="cholesky">
+            <label for="cholesky">Cholesky</label><br>
+            <input type="radio" id="ldl" name="method" value="ldl">
+            <label for="ldl">LDL</label><br>
+        </td>
+    <tr>
+        <td colspan="2"><button onclick="decomposeMatrix()">Submit</button></td>
+    </tr>
+    <tr>
+        <td colspan="2"><div id="error-message" style="display: none"></div></td>
+    </tr>
+</table>
+
+<!-- Display Response Data -->
+<div id="response-data" style="display: none">
+    <h2>Response Data</h2>
+    <div>
+        <h3>Original Matrix</h3>
+        <div id="original-matrix"></div>
+    </div>
+    <div>
+        <h3>Lower Triangular Matrix</h3>
+        <div id="lower-triangular-matrix"></div>
+    </div>
+    <!--        diagonal maxtrix for LDL method displayed if user choose LDL method-->
+    <h3>Diagonal Matrix</h3>
+    <div id="diagonal-matrix-container" style="display: none;">
+        <div id="diagonal-matrix"></div>
+    </div>
+    <div>
+        <h3>Upper Triangular Matrix</h3>
+        <div id="upper-triangular-matrix"></div>
+    </div>
+</div>
+
+<script th:inline="javascript">
+    /*<![CDATA[*/
+    function generateMatrixInputs() {
+        var rows = parseInt(document.getElementById('rows').value);
+        var cols = parseInt(document.getElementById('columns').value);
+        var matrixContainer = document.getElementById('matrix-container');
+        matrixContainer.innerHTML = '';
+
+        for (var i = 0; i < rows; i++) {
+            var row = document.createElement('tr');
+            for (var j = 0; j < cols; j++) {
+                var cell = document.createElement('td');
+                var input = document.createElement('input');
+                input.type = 'number';
+                input.name = 'matrix[' + i + '][' + j + ']';
+                cell.appendChild(input);
+                row.appendChild(cell);
+            }
+            matrixContainer.appendChild(row);
+        }
+    }
+
+    function decomposeMatrix() {
+        var rows = parseInt(document.getElementById('rows').value);
+        var cols = parseInt(document.getElementById('columns').value);
+        var matrix = [];
+
+        // Collect matrix values from input fields
+        for (var i = 0; i < rows; i++) {
+            matrix[i] = [];
+            for (var j = 0; j < cols; j++) {
+                matrix[i][j] = parseFloat(document.querySelector('input[name="matrix[' + i + '][' + j + ']"]').value);
+            }
+        }
+
+        var method = document.querySelector('input[name="method"]:checked').value;
+
+        // Prepare data for AJAX request
+        var requestData = {
+            rows: rows,
+            columns: cols,
+            matrix: matrix
+        };
+
+        // Make an asynchronous POST request to the appropriate API endpoint based on the selected method
+        var apiEndpoint = method === 'cholesky' ? '/api/decompose-by-cholesky' : '/api/decompose-by-ldl';
+
+        fetch(apiEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        })
+            .then(response => response.json())
+            .then(data => {
+                // Handle the response (data will contain matrices and other information)
+                var errorMessageContainer = document.getElementById('error-message');
+                var responseDataContainer = document.getElementById('response-data');
+                if(data.errorMessages) {
+                    responseDataContainer.style.display = 'none';
+                    errorMessageContainer.style.display = 'block';
+                    errorMessageContainer.textContent = data.errorMessages;
+                } else {
+                    responseDataContainer.style.display = 'block';
+                    displayResponseData(data, method);
+                    errorMessageContainer.style.display = 'none';
+                }
+
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Handle any errors or display an error message
+            });
+    }
+
+    function displayResponseData(data, method) {
+        var responseDataContainer = document.getElementById('response-data');
+        var originalMatrixContainer = document.getElementById('original-matrix');
+        var lowerTriangularMatrixContainer = document.getElementById('lower-triangular-matrix');
+        var upperTriangularMatrixContainer = document.getElementById('upper-triangular-matrix');
+        var diagonalMatrixContainer = document.getElementById('diagonal-matrix-container');
+
+
+        // Display original matrix
+        displayMatrix(data.matrix, originalMatrixContainer);
+
+        // Display lower triangular matrix
+        displayMatrix(data.lowerTriangularMatrix, lowerTriangularMatrixContainer);
+
+        // Display upper triangular matrix
+        displayMatrix(data.upperTriangularMatrix, upperTriangularMatrixContainer);
+
+
+        // Display diagonal matrix if LDL method is chosen
+        if (method === 'ldl') {
+            responseDataContainer.style.display = 'block';
+            displayMatrix(data.diagonalMatrix, diagonalMatrixContainer);
+            diagonalMatrixContainer.style.display = 'block';
+        } else {
+            responseDataContainer.style.display = 'block';
+            diagonalMatrixContainer.style.display = 'none';
+        }
+    }
+
+    function displayMatrix(matrixData, container) {
+        var table = document.createElement('table');
+
+        for (var i = 0; i < matrixData.length; i++) {
+            var row = document.createElement('tr');
+            for (var j = 0; j < matrixData[i].length; j++) {
+                var cell = document.createElement('td');
+                cell.textContent = matrixData[i][j];
+                row.appendChild(cell);
+            }
+            table.appendChild(row);
+        }
+
+        container.innerHTML = '';
+        container.appendChild(table);
+    }
+
+    document.addEventListener('DOMContentLoaded', generateMatrixInputs);
+    document.getElementById('rows').addEventListener('change', generateMatrixInputs);
+    document.getElementById('columns').addEventListener('change', generateMatrixInputs);
+    /*]]>*/
+</script>
+</body>
+</html>
